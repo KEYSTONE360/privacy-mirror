@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Privacy Mirror",
+  "version": "0.1.0",
+  "description": "Evidence-driven cross-layer tracking analysis with minimum intervention.",
+  "permissions": ["storage", "webRequest", "webNavigation", "declarativeNetRequest", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "scripts": ["core/privacy-mirror-core.js", "ai/evidence-sanitizer.js", "adapters/firefox-adapter.js", "background.js"] },
+  "action": { "default_title": "Privacy Mirror" },
+  "sidebar_action": { "default_title": "Privacy Mirror", "default_panel": "sidepanel.html", "open_at_install": false },
+  "commands": { "_execute_sidebar_action": { "suggested_key": { "default": "Alt+Shift+P" } } },
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["main-world.js"], "run_at": "document_start", "all_frames": true, "world": "MAIN" },
+    { "matches": ["<all_urls>"], "js": ["bridge.js"], "run_at": "document_start", "all_frames": true, "world": "ISOLATED" }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [{ "id": "tracking_parameter_cleaner", "enabled": true, "path": "rules/tracking-parameters.json" }]
+  },
+  "browser_specific_settings": { "gecko": { "id": "privacy-mirror@example.invalid", "strict_min_version": "128.0" } }
+}

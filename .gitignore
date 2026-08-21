@@ -1,0 +1,8 @@
+dist/
+coverage/
+*.pem
+*.key
+*.crt
+.DS_Store
+Thumbs.db
+work/

@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "dclid", "fbclid", "msclkid", "mc_cid", "mc_eid", "_gl", "yclid", "ttclid", "twclid"]
+          }
+        }
+      }
+    },
+    "condition": {
+      "regexFilter": "^https?://.*[?&](utm_(source|medium|campaign|term|content)|gclid|dclid|fbclid|msclkid|mc_cid|mc_eid|_gl|yclid|ttclid|twclid)=",
+      "resourceTypes": ["main_frame"]
+    }
+  }
+]

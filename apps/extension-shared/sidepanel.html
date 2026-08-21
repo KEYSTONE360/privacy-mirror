@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Privacy Mirror</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <p class="eyebrow">PRIVACY MIRROR</p>
+    <h1>현재 사이트 분석</h1>
+    <p id="site" class="site">대기 중</p>
+  </header>
+  <main>
+    <section class="scores" aria-label="점수">
+      <article><span>Risk</span><strong id="risk">–</strong><small>/ 100</small></article>
+      <article><span>Confidence</span><strong id="confidence">–</strong><small>/ 100</small></article>
+    </section>
+    <section class="card">
+      <div class="card-title"><h2>보호 상태</h2><span id="policy" class="badge">OBSERVE</span></div>
+      <p id="recommendation">근거를 수집하고 있습니다.</p>
+      <button id="toggle" type="button">이 사이트 보호 전환</button>
+    </section>
+    <section class="card">
+      <div class="card-title"><h2>최근 근거</h2><span id="count">0</span></div>
+      <ol id="events" class="timeline"></ol>
+    </section>
+    <section class="card">
+      <h2>최소 개입 추천</h2>
+      <ul id="interventions" class="chips"></ul>
+    </section>
+    <section class="card">
+      <div class="card-title"><h2>AI 보조 분석</h2><span id="ai-status" class="badge">OFF</span></div>
+      <p id="ai-summary">기본값은 OFF입니다. AI가 없어도 로컬 보호는 동일하게 동작합니다.</p>
+    </section>
+    <p class="limit">위험·확신 점수는 추정치이며, 브라우저 엔진 내부·일부 Worker·제한된 페이지는 완전 관찰할 수 없습니다.</p>
+  </main>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
