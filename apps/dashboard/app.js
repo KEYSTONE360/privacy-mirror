@@ -289,7 +289,7 @@
     try {
       const result = await api.runtime.sendMessage({ type: "PM_RUN_HISTORY_AI", site, hours, mode: $("history-ai-mode").value });
       const ai = result && result.ai;
-      if (!ai || ai.status !== "OK" || !ai.analysis) throw new Error(ai && ai.status === "NO_DATA" ? "선택한 기간에 분석할 기록이 없습니다." : "AI 평가를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      if (!ai || ai.status !== "OK" || !ai.analysis) throw new Error(ai && ai.status === "NO_DATA" ? "선택한 기간에 분석할 기록이 없습니다." : ai && ai.reason === 'timeout' ? 'AI 모델 응답 시간이 초과됐습니다. 잠시 후 다시 실행해 주세요.' : `AI 평가를 완료하지 못했습니다 (${ai && ai.reason || '연결 오류'}). 잠시 후 다시 시도해 주세요.`);
       const names = { LIKELY_TRACKING: "추적 가능성 높음", POSSIBLE_TRACKING: "추적 의심", AMBIGUOUS: "판단 근거 부족", LIKELY_BENIGN: "정상 사용 가능성 높음" };
       $("history-ai-status").textContent = `${names[ai.analysis.classification] || "평가 완료"} · ${new Date(result.evaluatedAt).toLocaleString()}`;
       $("history-ai-metrics").textContent = `위험 접근 지수 ${result.riskIndex}/100 · AI 확신도 ${ai.analysis.aiConfidence}/100 · 관찰 ${result.summary.totals.total}건 · 방어 ${result.summary.totals.defended}건`;

@@ -1,4 +1,7 @@
 body{display:block!important;isolation:isolate}
+.metric-line strong>span{font:inherit;line-height:inherit;padding:0;color:inherit}
+.metric-line{align-items:baseline;gap:6px}
+.metric-line>span{padding-bottom:0;align-self:baseline}
 #ambient-fibers{opacity:.1!important;mix-blend-mode:normal!important}
 #ambient-rings{opacity:.08!important}
 body>main{position:relative!important;z-index:10!important}

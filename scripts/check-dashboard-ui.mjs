@@ -11,6 +11,8 @@ try {
   await page.waitForFunction(() => document.getElementById('defense-rate').textContent === '40%');
   assert.match(await page.locator('#site-table').innerText(), /4\/10 \(40%\)/);
   assert.match(await page.locator('#hour-table').innerText(), /4\/10 \(40%\)/);
+  const typography = await page.locator('.metric-line').evaluate(el => ({ number: parseFloat(getComputedStyle(el.querySelector('strong > span')).fontSize), denominator: parseFloat(getComputedStyle(el.querySelector(':scope > span')).fontSize) }));
+  assert.ok(typography.number > typography.denominator * 2, 'CountUp must preserve the large metric font');
   await page.locator('#sites').evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }));
   await page.waitForFunction(() => document.querySelector('.line-sidebar__item[aria-current="true"]')?.textContent.includes('사이트별'));
   await page.locator('#ai-review').evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'instant' }));

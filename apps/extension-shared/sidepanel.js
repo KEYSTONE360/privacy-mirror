@@ -68,7 +68,7 @@
       byId("ai-summary").textContent = `${names[ai.analysis.classification] || "판단 보류"}. ${(ai.analysis.explanation || []).slice(0, 2).join(" ").slice(0, 220)}`;
     }
     else if (status === "SKIPPED") byId("ai-summary").textContent = "로컬 근거가 충분해 AI 호출을 생략했습니다.";
-    else if (status === "UNAVAILABLE") byId("ai-summary").textContent = "원격 서버 또는 모델 호출에 실패했습니다. 브라우저 내 보호는 계속 동작합니다.";
+    else if (status === "UNAVAILABLE") byId("ai-summary").textContent = ai && ai.reason === 'timeout' ? "AI 모델 응답 시간이 초과됐습니다. 잠시 후 다시 분석해 주세요. 브라우저 내 보호는 계속 동작합니다." : `AI 분석을 완료하지 못했습니다 (${ai && ai.reason || '연결 오류'}). 브라우저 내 보호는 계속 동작합니다.`;
     else if (status === "CONFIG_REQUIRED") byId("ai-summary").textContent = "고정 분석 서버 설정을 확인해 주세요.";
     else byId("ai-summary").textContent = "AI 분석을 준비하고 있습니다.";
   }
@@ -129,7 +129,8 @@
       }
       const response = await api.runtime.sendMessage({ type: "PM_RUN_AI", tabId: activeTabId, mode: "ADAPTIVE" });
       renderAi(response && response.ai, { mode: "ADAPTIVE" });
-    } finally { button.disabled = false; button.textContent = "다시 분석"; }
+    } catch (_) { renderAi({ status: 'UNAVAILABLE', reason: 'extension-connection-interrupted' }, {}); }
+    finally { button.disabled = false; button.textContent = "다시 분석"; }
   });
 
   byId("open-dashboard").addEventListener("click", async () => {
@@ -148,5 +149,5 @@
     const response = await api.runtime.sendMessage({ type: "PM_RUN_AI", tabId: activeTabId, mode: "ADAPTIVE" });
     renderAi(response && response.ai, { mode: "ADAPTIVE" });
   }
-  void start();
+  void start().catch(() => renderAi({ status: 'UNAVAILABLE', reason: 'extension-connection-interrupted' }, {}));
 })();
