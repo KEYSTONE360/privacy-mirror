@@ -1,0 +1,46 @@
+import { chromium } from 'playwright';
+import { mkdtemp, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve, join } from 'node:path';
+import assert from 'node:assert/strict';
+const profile = await mkdtemp(join(tmpdir(), 'pm-browser-test-'));
+const extension = resolve('dist/chrome');
+const attached = process.argv.includes('--cdp') ? await chromium.connectOverCDP('http://127.0.0.1:9335') : null;
+const context = attached ? attached.contexts()[0] : await chromium.launchPersistentContext(profile, { ...(process.argv.includes('--system-chrome') ? { executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' } : { channel: 'chromium' }), headless: true, ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging', `--disable-extensions-except=${extension}`, `--load-extension=${extension}`], viewport: { width: 1440, height: 1000 } });
+try {
+  if (process.argv.includes('--system-chrome')) { const cdp = await context.newCDPSession(context.pages()[0]); await cdp.send('Extensions.loadUnpacked', { path: extension }); }
+  const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+  const extensionId = new URL(worker.url()).hostname;
+  const lab = await context.newPage();
+  await lab.goto('http://127.0.0.1:4173/test-pages/tracking-stress-lab.html');
+  const extensionPage = await context.newPage();
+  await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  const sourceId = await extensionPage.evaluate(async () => (await chrome.tabs.query({ url: 'http://127.0.0.1:4173/test-pages/tracking-stress-lab.html' }))[0].id);
+  const policy = await extensionPage.evaluate(tabId => chrome.runtime.sendMessage({ type: 'PM_SET_POLICY', tabId, mode: 'protect' }), sourceId);
+  assert.equal(policy.report.protection.effective, 'protect');
+  await lab.bringToFront();
+  await lab.getByRole('button', { name: '③ 복합 추적 · 30초' }).click();
+  await lab.waitForFunction(() => /실행 (?:[5-9]|[1-9][0-9]+)회/.test(document.getElementById('counts').textContent));
+  await lab.getByRole('button', { name: '중지', exact: true }).click();
+  const dashboard = await context.newPage();
+  const errors = [];
+  dashboard.on('pageerror', error => errors.push(error.message));
+  await dashboard.goto('http://127.0.0.1:4173/dashboard/index.html');
+  await dashboard.getByRole('button', { name: '확장 연결', exact: true }).click();
+  await dashboard.waitForFunction(() => document.getElementById('live-status').textContent.includes('LIVE EXTENSION'));
+  await dashboard.waitForFunction(() => Number(document.getElementById('history-defended').getAttribute('aria-label')) > 0);
+  const metrics = await dashboard.evaluate(() => ({ observed: Number(document.getElementById('history-total').getAttribute('aria-label')), defended: Number(document.getElementById('history-defended').getAttribute('aria-label')), rate: document.getElementById('defense-rate').textContent, siteRows: document.getElementById('site-table').rows.length }));
+  assert.ok(metrics.observed >= metrics.defended && metrics.defended > 0);
+  assert.ok(metrics.siteRows > 0);
+  await dashboard.locator('#sites').evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+  await dashboard.waitForFunction(() => document.querySelector('.line-sidebar__item[aria-current="true"]')?.textContent.includes('사이트별'));
+  await dashboard.locator('#ai-review').evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+  await dashboard.waitForFunction(() => document.querySelector('.line-sidebar__item[aria-current="true"]')?.textContent.includes('AI 종합'));
+  await mkdir('outputs', { recursive: true });
+  await dashboard.screenshot({ path: 'outputs/connected-dashboard-desktop.png' });
+  await dashboard.setViewportSize({ width: 390, height: 844 });
+  await dashboard.locator('#overview').scrollIntoViewIfNeeded();
+  await dashboard.screenshot({ path: 'outputs/connected-dashboard-mobile.png' });
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify({ extensionLoaded: true, actualSignals: true, localDashboardConnected: true, scrollSync: true, ...metrics, errors }));
+} finally { await context.close(); }

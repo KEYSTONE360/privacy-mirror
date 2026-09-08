@@ -73,20 +73,21 @@ Local Evidence Graph
 
 Ultra model은 `RESEARCH` 요청에서만 선택됩니다. AI 응답 단독으로 domain 차단, 임의 storage 삭제, unknown parameter 삭제, JavaScript 비활성화를 하지 않습니다. 응답이 timeout, 429, 5xx, invalid JSON이거나 존재하지 않는 evidence ID를 인용하면 AI 결과를 버리고 로컬 엔진이 계속 작동합니다.
 
-서버 전용 환경 변수:
+로컬 AI 서버(개발 및 독립 검증용):
 
 ```powershell
-Copy-Item .env.example .env
-# 실제 배포 환경의 secret manager에서 다음 값을 설정합니다.
-# NVIDIA_API_KEY_FAST
-# NVIDIA_API_KEY_RESEARCH
+Copy-Item .env.example .env.local
+# .env.local에 본인의 NVIDIA_API_KEY_FAST를 입력합니다.
+npm run server:local
 ```
 
-`.env`는 Git에 커밋하지 마십시오. API key는 확장, dashboard, manifest, GitHub 파일에 포함되면 안 됩니다.
+공개 설치 패키지는 고정 HTTPS 분석 주소 `https://privacy-mirror-analysis-blazetiger10-5946s-projects.vercel.app`를 사용합니다. 로컬 실행은 개발·독립 검증용으로 127.0.0.1에만 바인딩됩니다.
+
+`.env.local`은 Git에서 제외됩니다. API key는 확장, dashboard, manifest, 패키지, GitHub 파일에 포함되면 안 되며 Vercel Production 환경 변수에만 둡니다. 공개 클라이언트에 공용 키를 넣는 방식은 지원하지 않습니다.
 
 ## Zero-retention 서버
 
-서버는 선택 사항입니다. AI를 사용하지 않으면 확장과 로컬 분석은 독립적으로 작동합니다.
+서버는 AI 설명에만 사용됩니다. 서버가 중단되거나 모델이 요청을 거절해도 브라우저 내 결정론적 탐지·보호·7일 통계는 독립적으로 작동합니다. 현재 공개 endpoint에는 사용자 계정 기반 인증이나 완전한 남용 방지 장치가 없으므로 운영자는 Vercel/NVIDIA 사용량과 비용 한도를 별도로 설정해야 합니다.
 
 애플리케이션 서버의 원칙:
 
@@ -104,7 +105,7 @@ Copy-Item .env.example .env
 ```powershell
 $env:PM_TLS_CERT_PATH = "C:\certs\localhost.crt"
 $env:PM_TLS_KEY_PATH = "C:\certs\localhost.key"
-$env:NVIDIA_API_KEY_FAST = "<server secret>"
+$env:NVIDIA_API_KEY_FAST = "<server secret used by every NIM tier>"
 npm run server
 ```
 
@@ -144,7 +145,35 @@ Dashboard:
 npm run dashboard
 ```
 
-`http://127.0.0.1:4173`에서 synthetic evidence graph 데모를 볼 수 있습니다. `test-pages/normal-canvas.html`과 `fingerprint-canvas.html`을 비교하면 사용자 입력·hidden Canvas·digest sequence 차이를 확인할 수 있습니다. `combined-fingerprint.html`의 외부 요청은 의도적으로 실패하는 `.invalid` 도메인을 사용합니다.
+`http://127.0.0.1:4173`에서 대시보드 외형을 볼 수 있습니다. 실제 통계는 확장 패널의 **최근 추적 데이터 보기** 버튼으로 연 확장 내부 페이지에서만 브라우저 기록과 연결됩니다. `test-pages/normal-canvas.html`과 `fingerprint-canvas.html`을 비교하면 사용자 입력·hidden Canvas·digest sequence 차이를 확인할 수 있습니다. `combined-fingerprint.html`의 외부 요청은 의도적으로 실패하는 `.invalid` 도메인을 사용합니다.
+
+### 최근 추적 데이터
+
+확장은 사이트의 registrable domain(eTLD+1)과 1시간 단위 집계만 `storage.local`에 최대 7일 보관합니다. 전체 URL, query string, 쿠키·storage 원문, Canvas 픽셀과 raw token은 이 기록에 포함하지 않습니다. 7일보다 오래된 시간 버킷은 새 이벤트가 기록될 때 자동 삭제됩니다.
+
+확장 패널의 **최근 추적 데이터 보기**를 누르면 확장 내부 웹 대시보드가 열립니다. 여기서 다음을 확인할 수 있습니다.
+
+- 모든 사이트 또는 특정 사이트의 최근 24시간·7일 통계
+- 로컬 시간 기준 사이트 × 1시간 상세 기록
+- 감지 신호, 방어 합계, Canvas/WebGL 바꿔치기, 추적 링크 정리, 실제 차단, 호환성 롤백
+- 시간대별 막대 그래프와 사이트별 순위
+
+현재 구현에는 임의의 third-party 요청을 차단하는 동적 차단기가 없으므로 **차단** 수치는 실제 차단이 구현·실행된 경우에만 증가하며, 그렇지 않으면 0으로 표시됩니다. `방어`는 바꿔치기·링크 정리·차단의 합계입니다.
+
+### 누구나 설치할 수 있는 배포본 만들기
+
+```powershell
+npm run package:verify
+```
+
+이 명령은 Chrome/Firefox 산출물의 manifest 참조 파일과 비밀값 혼입을 검사합니다. 일반 사용자에게 한 번 클릭 설치를 제공하려면 플랫폼 서명이 추가로 필요합니다.
+
+- Chrome(Windows/macOS): `dist/chrome`을 ZIP으로 묶어 Chrome Web Store 심사·게시가 필요합니다. GitHub ZIP을 일반 사용자가 바로 설치하는 방식은 지원되지 않습니다.
+- Firefox: `dist/firefox`를 AMO에 제출하여 서명된 XPI를 받아야 합니다. 자체 배포도 Mozilla 서명이 필요합니다.
+- 심사 전 개인정보처리방침에는 `<all_urls>`, website activity/technical data 관찰 목적, 로컬 처리 범위, 선택형 NVIDIA 전송과 zero-retention 한계를 정확히 기재해야 합니다.
+- Firefox 142 이상을 지원합니다. Chrome은 114 이상을 지원합니다.
+
+개발자 모드 설치는 위 절차대로 즉시 가능하지만, 이것을 스토어 서명 배포와 동일하다고 표현하지 않습니다.
 
 ## 테스트
 
@@ -169,6 +198,8 @@ npm run build
 - ablation, synthetic precision/recall/F1, core P95 성능
 - server의 raw field 거부와 persistence/telemetry 의존성 부재
 - dist secret-like marker 검사
+- manifest/UI 참조 파일 존재와 전체 배포 디렉터리 비밀값 검사
+- Firefox `web-ext lint` 공식 패키지 검사
 
 합성 fixture 성능은 실제 브라우저·사이트 성능을 대신하지 않습니다. Chrome/Firefox의 extension loading, DNR 규칙 유효성, Canvas 결과 안정성은 실제 브라우저에서 별도 검증해야 합니다.
 
@@ -209,5 +240,26 @@ Risk와 Confidence는 확률적 진실값이나 법적 판정이 아니라 설�
 Privacy Mirror는 Canvas 픽셀, 원문 fingerprint, form/password/email, request/response body, raw cookie/storage value, full URL history를 영구 저장하거나 AI로 보내도록 설계하지 않았습니다. 세션 분석에는 제한된 이벤트 메타데이터와 HMAC tag만 사용합니다. AI mode와 서버 URL 설정은 로컬 저장소에 둘 수 있지만 API key는 서버에만 둡니다.
 
 ## License
+
+## 2026-09 UI / AI integration
+
+- Local live connection: `http://127.0.0.1:4173/dashboard/index.html` and `http://localhost:4173/dashboard/index.html` now have an isolated extension bridge. Install/reload the latest extension, refresh the dashboard, then click **확장 연결**. The connected page reads this browser's local seven-day history and uses the most recently accessed ordinary web tab for its current report. Other ports, paths and embedded frames are rejected. This is a direct browser-to-extension connection; no history database or local API server is introduced.
+- Navigation follows the visible section on scroll, click and hash navigation. The left LineSidebar, top PillNav and current-section label share the same state. Original easing and spring mathematics are retained.
+- Latest validation: synthetic-history rendering shows 4 defended events out of 10 as 40% in both the metric and tables; desktop/mobile rendering and scroll synchronization pass. `scripts/check-dashboard-ui.mjs` uses clearly synthetic data injected only in the test browser. `scripts/check-browser-integration.mjs` is the full real-extension test, but its execution is currently blocked on this PC by the Chrome for Testing side-by-side error; system Chrome does not expose the unpacked-extension test method. Do not interpret fixture UI validation as a completed real-extension end-to-end test.
+
+- The dashboard is organized as a protection analysis workspace: weighted access risk, defense rate, observed/defended volume, access outcomes, AI review, activity pulse, signal mix, site intelligence, time forensics, cross-layer evidence, and minimum intervention.
+- Site intelligence is ordered by weighted risk and includes severity, weighted risk index, defense rate, observation volume, dangerous access count, dominant signal, last activity, and recent-half versus previous-half trend. Time forensics includes severity, dominant signal, observed/defended counts, average event risk, average event confidence, and applied treatment.
+- The left LineSidebar moves only the single nearest item. When the pointer leaves, only the current selection remains emphasized. The page heading is “추적 위험 분석”.
+
+- The extension displays the current five-minute risk score, AI confidence, the three largest observed risk contributions, and a short AI explanation. Factor contributions are not percentages and are not added to the final score again.
+- “최근 추적 데이터 보기” opens `https://privacy-mirror-analysis-blazetiger10-5946s-projects.vercel.app/dashboard/index.html`. The extension authorizes this specific tab to access local history through an isolated content bridge. Opening the website independently does not authorize history access. Refresh the extension after installing the updated ZIP.
+- The dashboard offers Lightning and Ultra Research evaluation of the selected site and 24-hour/7-day range. Only anonymous aggregate counts go to the analysis endpoint. Actual site names and hour labels appear in the authorized dashboard's browser memory; they are not included in the AI request. Closing the dashboard removes the rendered view; the extension retains its seven-day local aggregates.
+- Historical risk index = `(dangerous + suspicious × 0.5) / total × 100`. This is an access ratio, not a probability or a five-minute session risk score. Historical aggregates contain no API sequence and cannot establish causal data flow. Empty history does not trigger AI. Filter changes mark the previous evaluation as stale.
+- Existing Vercel Production NVIDIA keys remain server-only. The app does not log or persist analysis bodies. Vercel and NVIDIA may retain operational metadata under their own policies; absolute infrastructure-wide zero retention is not guaranteed. The authorized remote dashboard can read displayed history, so its origin and scripts are part of the threat model.
+- GhostFibers (OGL) and MagicRings (Three.js) preserve the supplied vertex/fragment shaders. CountUp uses the supplied Motion spring (`20 + 40 * (1 / duration)`, `100 * (1 / duration)`). LineSidebar, PillNav, CardSwap and Dock retain the supplied falloff, geometry, easing and spring equations. Lifecycle cleanup, keyboard support, zero-size guards and a viewport-coordinate correction for Dock are integration changes, not mathematical simplifications.
+- Effects are bundled locally, without CDN JavaScript. Offscreen/hidden-page graphics stop rendering; CardSwap pauses offscreen/on hover/on focus. Decorative rings are disabled for reduced motion. UI animation is never used as a source of protection state. The dashboard itself is excluded from instrumentation.
+- Build using `npm ci` followed by `npm run check`; `npm run dashboard` serves the built dashboard at `http://127.0.0.1:4173/dashboard/index.html` and the lab at `/test-pages/tracking-stress-lab.html`. Local dashboard preview has no extension bridge; use the remote dashboard opened by the extension for real statistics.
+- The synthetic lab offers normal rendering, hidden fingerprint signals, and a bounded 30-second cross-layer sequence. It uses only synthetic storage values and a `.invalid` network destination. It never reads personal cookies or files. Repetition damping and five-minute retention mean large swings are not guaranteed, and stopping the lab does not instantly reset risk.
+
 
 MIT

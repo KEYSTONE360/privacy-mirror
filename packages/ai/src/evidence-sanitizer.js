@@ -41,7 +41,7 @@
       evidenceVersion: Number((options && options.evidenceVersion) || report.eventCount || sanitizedEvents.length),
       mode: (options && options.mode) || "ADAPTIVE",
       localAnalysis: { riskScore: bounded(report.riskScore), confidenceScore: bounded(report.confidenceScore) },
-      context: { userInteractionRecent: sanitizedEvents.slice(-3).some((event) => event.userActivated), frameType: "TOP" },
+      context: { userInteractionRecent: sanitizedEvents.slice(-3).some((event) => event.userActivated), frameType: "TOP", presentation: "Explain the top observed risk factors briefly in Korean, in at most two sentences. Scores are estimates, not proof of tracking." },
       events: sanitizedEvents,
       protectionsAvailable
     };
@@ -64,5 +64,39 @@
   function safeId(value) { return `event_${String(value).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40)}`; }
   function bounded(value) { return Math.max(0, Math.min(100, Math.round(Number(value) || 0))); }
   function actionName(value) { return String(value || "").replace(/-/g, "_").toUpperCase(); }
-  return Object.freeze({ sanitizeEvidence, validateSanitizedPackage, TYPE_MAP });
+  function sanitizeHistory(history, options) {
+    const now = options && options.now || Date.now();
+    const hours = Math.max(1, Math.min(168, Number(options && options.hours) || 168));
+    const site = options && options.site || "*";
+    const totals = { observed: 0, defended: 0, perturbed: 0, cleaned: 0, blocked: 0, rollback: 0, dangerous: 0, suspicious: 0, benign: 0, total: 0 };
+    const categories = {};
+    let siteCount = 0;
+    for (const [name, data] of Object.entries(history && history.sites || {})) {
+      if (site !== "*" && name !== site) continue;
+      let included = false;
+      for (const [hour, bucket] of Object.entries(data.hours || {})) {
+        if (Number(hour) < now - hours * 3600000 || Number(hour) > now) continue;
+        included = true;
+        totals.total += Math.max(0, Number(bucket.total) || 0);
+        const outcomes = bucket.outcomes || {};
+        for (const key of ["observed", "perturbed", "cleaned", "blocked", "rollback"]) totals[key] += Math.max(0, Number(outcomes[key]) || 0);
+        totals.defended += Math.max(Math.max(0, Number(outcomes.defended) || 0), ["perturbed", "cleaned", "blocked"].reduce((sum, key) => sum + Math.max(0, Number(outcomes[key]) || 0), 0));
+        for (const key of ["dangerous", "suspicious", "benign"]) totals[key] += Math.max(0, Number(bucket.access && bucket.access[key]) || 0);
+        const categoryKeys = ["canvas", "canvas-read", "canvas-write", "webgl", "digest", "storage", "network", "navigation", "other"];
+        if (options && options.includeTechnical) categoryKeys.push("environment");
+        for (const key of categoryKeys) {
+          categories[key] = (categories[key] || 0) + Math.max(0, Number(bucket.categories && bucket.categories[key]) || 0);
+        }
+      }
+      if (included) siteCount += 1;
+    }
+    const riskIndex = totals.total ? Math.min(100, Math.round(100 * (totals.dangerous + totals.suspicious * 0.5) / totals.total)) : null;
+    return {
+      schemaVersion: "1.0", evidenceVersion: totals.total, mode: "MANUAL",
+      localAnalysis: { riskScore: riskIndex || 0, confidenceScore: 0 },
+      context: { frameType: "AGGREGATE", analysisScope: "Historical aggregate counts, not an API sequence. No causal data flow can be inferred. The risk score is a weighted access ratio, not a probability. Explain findings briefly in Korean.", hours, siteCount, totals, categories },
+      events: [], protectionsAvailable: []
+    };
+  }
+  return Object.freeze({ sanitizeEvidence, sanitizeHistory, validateSanitizedPackage, TYPE_MAP });
 });

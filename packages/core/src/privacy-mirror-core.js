@@ -5,9 +5,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function privacyMirrorFactory() {
   "use strict";
 
-  const VERSION = "0.1.0";
+  const VERSION = "0.2.0";
   const MAX_EVENTS = 1000;
   const CORRELATION_WINDOW_MS = 2500;
+  const SCORE_WINDOW_MS = 5 * 60 * 1000;
   const TRACKING_PARAMETERS = Object.freeze([
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "utm_id", "gclid", "dclid", "fbclid", "msclkid", "mc_cid", "mc_eid",
@@ -172,7 +173,7 @@
 
   function scrubMeta(meta) {
     const source = meta || {};
-    const allowed = ["algorithm", "byteLength", "hidden", "area", "thirdParty", "resourceType", "operation", "nameLength", "tokenTag", "removedCount", "durationMs", "policy"];
+    const allowed = ["algorithm", "byteLength", "hidden", "area", "thirdParty", "resourceType", "operation", "nameLength", "tokenTag", "removedCount", "durationMs", "policy", "intervention"];
     const result = {};
     for (const key of allowed) if (source[key] !== undefined) result[key] = source[key];
     return result;
@@ -198,6 +199,119 @@
       if (event.context.sequence.includes("fingerprint→network")) { risk += 7; confidence += 10; }
       if (event.context.sequence.includes("navigation→storage")) { risk += 6; confidence += 8; }
       return { risk: clamp(risk, 0, 40), confidence: clamp(confidence, 0, 40) };
+    }
+  }
+
+  function scoreEvidenceWindow(events, graph, now) {
+    const currentTime = Number.isFinite(now) ? now : Date.now();
+    const recent = (events || []).filter((event) => currentTime - event.ts <= SCORE_WINDOW_MS);
+    const buckets = new Map();
+    for (const event of recent) {
+      const category = event.context && event.context.category || eventCategory(event.type);
+      if (["other", "compatibility"].includes(category)) continue;
+      const age = Math.max(0, currentTime - event.ts);
+      const decay = Math.max(0.35, Math.exp(-age / SCORE_WINDOW_MS));
+      const values = buckets.get(category) || [];
+      values.push({
+        risk: (event.riskContribution || 0) * decay,
+        confidence: (event.confidenceContribution || 0) * decay
+      });
+      buckets.set(category, values);
+    }
+
+    let riskEvidence = 0;
+    let confidenceEvidence = 0;
+    const categoryScores = {};
+    const repeatWeights = [1, 0.35, 0.18, 0.1];
+    for (const [category, values] of buckets) {
+      const rankedRisk = values.map((item) => item.risk).sort((a, b) => b - a);
+      const rankedConfidence = values.map((item) => item.confidence).sort((a, b) => b - a);
+      const risk = rankedRisk.slice(0, repeatWeights.length).reduce((sum, value, index) => sum + value * repeatWeights[index], 0);
+      const confidence = rankedConfidence.slice(0, repeatWeights.length).reduce((sum, value, index) => sum + value * repeatWeights[index], 0);
+      categoryScores[category] = { risk: Math.round(risk), confidence: Math.round(confidence), samples: values.length };
+      riskEvidence += risk;
+      confidenceEvidence += confidence;
+    }
+
+    const recentIds = new Set(recent.map((event) => event.id));
+    const corroboratingEdges = ((graph && graph.edges) || []).filter((edge) =>
+      recentIds.has(edge.from) && recentIds.has(edge.to) && ["derived-by-digest", "temporal-egress", "token-lineage", "bounce-persistence"].includes(edge.kind)
+    );
+    const featureDiversity = new Set([...buckets.keys()].map(mapFeatureCategory).filter(Boolean)).size;
+    const diversityFactor = 0.55 + Math.min(1, featureDiversity / 5) * 0.35;
+    const riskScore = clamp(Math.round(100 * (1 - Math.exp(-riskEvidence / 72))), 0, 100);
+    const confidenceBase = 100 * (1 - Math.exp(-confidenceEvidence / 78));
+    const confidenceScore = clamp(Math.round(confidenceBase * diversityFactor + Math.min(20, corroboratingEdges.length * 4)), 0, 100);
+    return {
+      riskScore,
+      confidenceScore,
+      categoryScores,
+      evidenceWindowMs: SCORE_WINDOW_MS,
+      corroboratingEdges: corroboratingEdges.length,
+      featureDiversity
+    };
+  }
+
+  class ProtectionController {
+    constructor(options) {
+      const config = options || {};
+      this.mode = ["auto", "observe", "protect"].includes(config.mode) ? config.mode : "auto";
+      this.effective = "observe";
+      this.reason = "collecting-evidence";
+      this.protectRisk = config.protectRisk || 60;
+      this.protectConfidence = config.protectConfidence || 50;
+      this.releaseRisk = config.releaseRisk || 40;
+      this.releaseConfidence = config.releaseConfidence || 30;
+      this.rollbackCooldownMs = config.rollbackCooldownMs || 30000;
+      this.rollbackUntil = 0;
+    }
+
+    setMode(mode) {
+      this.mode = ["auto", "observe", "protect"].includes(mode) ? mode : "auto";
+      return this.mode;
+    }
+
+    registerRollback(at) {
+      this.rollbackUntil = Math.max(this.rollbackUntil, (Number(at) || Date.now()) + this.rollbackCooldownMs);
+      this.effective = "observe";
+      this.reason = "compatibility-rollback";
+    }
+
+    reconcile(report, at) {
+      const now = Number(at) || Date.now();
+      if (now < this.rollbackUntil) {
+        this.effective = "observe";
+        this.reason = "compatibility-cooldown";
+      } else if (this.mode === "observe") {
+        this.effective = "observe";
+        this.reason = "manual-observe";
+      } else if (this.mode === "protect") {
+        this.effective = "protect";
+        this.reason = "manual-protect";
+      } else if (this.effective === "protect") {
+        if (report.riskScore <= this.releaseRisk || report.confidenceScore <= this.releaseConfidence) {
+          this.effective = "observe";
+          this.reason = "auto-evidence-released";
+        } else {
+          this.reason = "auto-protect-hold";
+        }
+      } else if (report.riskScore >= this.protectRisk && report.confidenceScore >= this.protectConfidence) {
+        this.effective = "protect";
+        this.reason = "auto-threshold-met";
+      } else {
+        this.effective = "observe";
+        this.reason = "auto-collecting-evidence";
+      }
+      return this.snapshot(now);
+    }
+
+    snapshot(now) {
+      return {
+        mode: this.mode,
+        effective: this.effective,
+        reason: this.reason,
+        rollbackUntil: Math.max(0, this.rollbackUntil - (Number(now) || Date.now()))
+      };
     }
   }
 
@@ -356,22 +470,22 @@
     }
 
     report() {
-      const riskScore = clamp(Math.round(100 * (1 - Math.exp(-this.riskEvidence / 80))), 0, 100);
-      const diversity = Math.min(1, this.categories.size / 5);
-      const confidenceScore = clamp(Math.round((100 * (1 - Math.exp(-this.confidenceEvidence / 80))) * (0.65 + diversity * 0.35)), 0, 100);
+      const updatedAt = this.events.length ? this.events[this.events.length - 1].ts : this.startedAt;
+      const scoring = scoreEvidenceWindow(this.events, this.graph.snapshot(), updatedAt);
       const base = {
         version: VERSION,
         site: this.site,
         startedAt: this.startedAt,
-        updatedAt: this.events.length ? this.events[this.events.length - 1].ts : this.startedAt,
-        riskScore,
-        confidenceScore,
+        updatedAt,
+        riskScore: scoring.riskScore,
+        confidenceScore: scoring.confidenceScore,
         policy: this.policy,
         categories: [...this.categories].filter(Boolean),
         eventCount: this.events.length,
         rollbacks: this.rollbacks.slice(-10),
         events: this.events.slice(-100).map(publicEvent),
-        graph: this.graph.snapshot()
+        graph: this.graph.snapshot(),
+        scoring
       };
       base.counterfactuals = INTERVENTIONS.map((item) => counterfactual(base, item));
       base.recommendation = optimizeInterventions(base);
@@ -397,9 +511,62 @@
       type: event.type,
       context: event.context,
       meta: scrubMeta(event.meta),
+      accessClass: classifyAccess(event),
       riskContribution: event.riskContribution,
       confidenceContribution: event.confidenceContribution
     };
+  }
+
+  function mergeTrackingHistory(current, site, events, now, retentionMs) {
+    const currentTime = Number.isFinite(now) ? now : Date.now();
+    const retention = Number.isFinite(retentionMs) ? retentionMs : 7 * 24 * 60 * 60 * 1000;
+    const cutoffHour = Math.floor((currentTime - retention) / 3600000) * 3600000;
+    const history = current && typeof current === "object" ? JSON.parse(JSON.stringify(current)) : { version: 1, sites: {} };
+    history.version = 1;
+    history.sites = history.sites && typeof history.sites === "object" ? history.sites : {};
+    for (const [storedSite, siteData] of Object.entries(history.sites)) {
+      siteData.hours = siteData.hours && typeof siteData.hours === "object" ? siteData.hours : {};
+      for (const hour of Object.keys(siteData.hours)) if (Number(hour) < cutoffHour) delete siteData.hours[hour];
+      if (!Object.keys(siteData.hours).length) delete history.sites[storedSite];
+    }
+    if (site && site !== "unknown") {
+      const siteData = history.sites[site] || { hours: {} };
+      for (const event of events || []) {
+        const timestamp = Math.max(currentTime - retention, Math.min(currentTime, Number(event.ts) || currentTime));
+        const hour = String(Math.floor(timestamp / 3600000) * 3600000);
+        const empty = { observed: 0, defended: 0, perturbed: 0, cleaned: 0, blocked: 0, rollback: 0 };
+        const emptyAccess = { dangerous: 0, suspicious: 0, benign: 0 };
+        const bucket = siteData.hours[hour] || { total: 0, risk: 0, confidence: 0, categories: {}, outcomes: empty, access: emptyAccess };
+        const category = event.context && event.context.category || "other";
+        const intervention = event.meta && event.meta.intervention;
+        const outcome = ["perturbed", "cleaned", "blocked"].includes(intervention) ? intervention : /^compatibility\./.test(event.type) ? "rollback" : "observed";
+        bucket.outcomes = Object.assign({}, empty, bucket.outcomes || {});
+        bucket.access = Object.assign({}, emptyAccess, bucket.access || {});
+        bucket.total += 1;
+        bucket.risk += Number(event.riskContribution) || 0;
+        bucket.confidence += Number(event.confidenceContribution) || 0;
+        bucket.categories[category] = (bucket.categories[category] || 0) + 1;
+        bucket.outcomes[outcome] += 1;
+        if (["perturbed", "cleaned", "blocked"].includes(outcome)) bucket.outcomes.defended += 1;
+        bucket.access[classifyAccess(event)] += 1;
+        siteData.hours[hour] = bucket;
+      }
+      if (Object.keys(siteData.hours).length) history.sites[site] = siteData;
+    }
+    history.updatedAt = currentTime;
+    return history;
+  }
+
+  function classifyAccess(event) {
+    const risk = Number(event && event.riskContribution) || 0;
+    const confidence = Number(event && event.confidenceContribution) || 0;
+    const context = event && event.context || {};
+    const meta = event && event.meta || {};
+    const sequence = Array.isArray(context.sequence) ? context.sequence : [];
+    if ((risk >= 18 && confidence >= 8) || (meta.thirdParty && sequence.some((item) => /network/.test(item)))) return "dangerous";
+    if (["perturbed", "cleaned", "blocked"].includes(meta.intervention)) return "suspicious";
+    if (risk >= 7 || confidence >= 5 || meta.thirdParty) return "suspicious";
+    return "benign";
   }
 
   function validationMetrics(cases) {
@@ -424,6 +591,7 @@
     VERSION,
     MAX_EVENTS,
     CORRELATION_WINDOW_MS,
+    SCORE_WINDOW_MS,
     TRACKING_PARAMETERS,
     registrableDomain,
     isThirdParty,
@@ -434,12 +602,16 @@
     FingerprintSignalProfiler,
     EvidenceGraph,
     RiskEngine,
+    scoreEvidenceWindow,
+    ProtectionController,
     TokenLineage,
     CompatibilityGuard,
     INTERVENTIONS,
     counterfactual,
     optimizeInterventions,
     SessionAnalyzer,
+    classifyAccess,
+    mergeTrackingHistory,
     validationMetrics
   });
 });

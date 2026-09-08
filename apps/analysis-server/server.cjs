@@ -1,6 +1,7 @@
 "use strict";
 const fs = require("node:fs");
 const https = require("node:https");
+const http = require("node:http");
 const { analyzeMinimizedPayload } = require("./server-lib.cjs");
 const { analyzeEvidence } = require("../../packages/ai/src/ai-service.cjs");
 
@@ -48,14 +49,23 @@ function handler(req, res) {
   });
 }
 
-if (require.main === module) {
+function startServer() {
+  const localLoopback = process.env.PM_ALLOW_INSECURE_LOOPBACK === "1";
   const certPath = process.env.PM_TLS_CERT_PATH;
   const keyPath = process.env.PM_TLS_KEY_PATH;
-  if (!certPath || !keyPath) throw new Error("PM_TLS_CERT_PATH and PM_TLS_KEY_PATH are required; plaintext HTTP is intentionally unsupported");
-  const server = https.createServer({ cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }, handler);
+  if (!localLoopback && (!certPath || !keyPath)) throw new Error("PM_TLS_CERT_PATH and PM_TLS_KEY_PATH are required outside local loopback mode");
+  const server = localLoopback
+    ? http.createServer(handler)
+    : https.createServer({ cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }, handler);
   server.requestTimeout = 5000;
   server.headersTimeout = 5000;
-  server.listen(Number(process.env.PM_PORT || 8443), "127.0.0.1");
+  const port = Number(process.env.PM_PORT || 8443);
+  server.listen(port, "127.0.0.1", () => {
+    if (localLoopback) process.stdout.write(`Privacy Mirror local AI ready on http://127.0.0.1:${port}\n`);
+  });
+  return server;
 }
 
-module.exports = { handler };
+if (require.main === module) startServer();
+
+module.exports = { handler, startServer };

@@ -6,3 +6,6 @@ coverage/
 .DS_Store
 Thumbs.db
 work/
+.env.local
+.npm-cache/
+node_modules/

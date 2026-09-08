@@ -3,8 +3,7 @@
   if (window.__privacyMirrorInstalled) return;
   Object.defineProperty(window, "__privacyMirrorInstalled", { value: true, configurable: false });
 
-  const EVENT_NAME = "__privacy_mirror_signal_v1";
-  const CONFIG_NAME = "__privacy_mirror_config_v1";
+  const CHANNEL = "__privacy_mirror_channel_v2";
   const native = {
     getImageData: CanvasRenderingContext2D.prototype.getImageData,
     putImageData: CanvasRenderingContext2D.prototype.putImageData,
@@ -25,15 +24,17 @@
 
   function emit(type, meta, rawTokens) {
     try {
-      document.dispatchEvent(new CustomEvent(EVENT_NAME, {
-        detail: {
+      window.postMessage({
+        channel: CHANNEL,
+        kind: "signal",
+        payload: {
           id: `p${++counter}`,
           ts: Date.now(),
           type,
           meta: meta || {},
           rawTokens: Array.isArray(rawTokens) ? rawTokens.filter(isTokenCandidate).slice(0, 8) : []
         }
-      }));
+      }, "*");
     } catch (_) { /* fail open */ }
   }
 
@@ -77,16 +78,18 @@
     try {
       const result = native.getImageData.apply(this, args);
       const canvas = this.canvas;
-      emit("canvas.read", { hidden: hiddenCanvas(canvas), area: canvas.width * canvas.height, operation: "getImageData", durationMs: performance.now() - started });
-      return perturbImageData(result, `2d:${canvas.width}x${canvas.height}:${args.join(",")}`);
+      const protecting = shouldProtect();
+      emit("canvas.read", { hidden: hiddenCanvas(canvas), area: canvas.width * canvas.height, operation: "getImageData", durationMs: performance.now() - started, intervention: protecting ? "perturbed" : "observed" });
+      return protecting ? perturbImageData(result, `2d:${canvas.width}x${canvas.height}:${args.join(",")}`) : result;
     } catch (_) { return native.getImageData.apply(this, args); }
   };
 
   HTMLCanvasElement.prototype.toDataURL = function privacyMirrorToDataURL(...args) {
     const started = performance.now();
     try {
-      emit("canvas.export", { hidden: hiddenCanvas(this), area: this.width * this.height, operation: "toDataURL", durationMs: performance.now() - started });
-      if (!shouldProtect() || !this.width || !this.height) return native.toDataURL.apply(this, args);
+      const protecting = shouldProtect() && Boolean(this.width && this.height);
+      emit("canvas.export", { hidden: hiddenCanvas(this), area: this.width * this.height, operation: "toDataURL", durationMs: performance.now() - started, intervention: protecting ? "perturbed" : "observed" });
+      if (!protecting) return native.toDataURL.apply(this, args);
       const context = this.getContext("2d");
       if (!context) return native.toDataURL.apply(this, args);
       const x = seedFor("canvas-x") % this.width;
@@ -109,8 +112,9 @@
     prototype.getParameter = function privacyMirrorGetParameter(parameter) {
       let result = original.call(this, parameter);
       const sensitive = parameter === 0x9245 || parameter === 0x9246;
-      emit("webgl.parameter", { operation: String(parameter), hidden: hiddenCanvas(this.canvas), area: this.canvas.width * this.canvas.height });
-      if (shouldProtect() && sensitive) result = parameter === 0x9245 ? "Privacy Mirror" : "Generic GPU";
+      const protecting = shouldProtect() && sensitive;
+      emit("webgl.parameter", { operation: String(parameter), hidden: hiddenCanvas(this.canvas), area: this.canvas.width * this.canvas.height, intervention: protecting ? "perturbed" : "observed" });
+      if (protecting) result = parameter === 0x9245 ? "Privacy Mirror" : "Generic GPU";
       return result;
     };
   }
@@ -173,14 +177,15 @@
       for (const key of [...url.searchParams.keys()]) {
         if (["utm_source","utm_medium","utm_campaign","utm_term","utm_content","gclid","fbclid","msclkid","dclid","_gl"].includes(key.toLowerCase())) { url.searchParams.delete(key); removed.push(key); }
       }
-      if (removed.length) { anchor.href = url.href; emit("navigation.link-cleaned", { operation: "known-parameter-cleaner", removedCount: removed.length }); }
+      if (removed.length) { anchor.href = url.href; emit("navigation.link-cleaned", { operation: "known-parameter-cleaner", removedCount: removed.length, intervention: "cleaned" }); }
     } catch (_) { /* invalid URL */ }
   }, true);
 
   addEventListener("error", (event) => emit(event.target && event.target !== window ? "compatibility.resource-failure" : "compatibility.error", { operation: "window.error" }), true);
   addEventListener("unhandledrejection", () => emit("compatibility.error", { operation: "unhandledrejection" }));
-  document.addEventListener(CONFIG_NAME, (event) => {
-    const next = event.detail || {};
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || !event.data || event.data.channel !== CHANNEL || event.data.kind !== "config") return;
+    const next = event.data.payload || {};
     config = {
       seedMaterial: typeof next.seedMaterial === "string" ? next.seedMaterial : config.seedMaterial,
       policy: ["observe", "protect"].includes(next.policy) ? next.policy : config.policy,
