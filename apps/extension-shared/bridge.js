@@ -1,8 +1,7 @@
 (function privacyMirrorBridge() {
   "use strict";
   const api = typeof browser !== "undefined" ? browser : chrome;
-  const EVENT_NAME = "__privacy_mirror_signal_v1";
-  const CONFIG_NAME = "__privacy_mirror_config_v1";
+  const CHANNEL = "__privacy_mirror_channel_v2";
   let queue = [];
   let timer = 0;
 
@@ -14,7 +13,7 @@
   }
 
   function dispatchConfig(config) {
-    document.dispatchEvent(new CustomEvent(CONFIG_NAME, { detail: config }));
+    window.postMessage({ channel: CHANNEL, kind: "config", payload: config }, "*");
   }
 
   function flush() {
@@ -25,8 +24,9 @@
     send({ type: "PM_EVENT_BATCH", events });
   }
 
-  document.addEventListener(EVENT_NAME, (event) => {
-    const detail = event.detail;
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || !event.data || event.data.channel !== CHANNEL || event.data.kind !== "signal") return;
+    const detail = event.data.payload;
     if (!detail || typeof detail.type !== "string" || typeof detail.ts !== "number") return;
     queue.push(detail);
     if (queue.length >= 32) flush();

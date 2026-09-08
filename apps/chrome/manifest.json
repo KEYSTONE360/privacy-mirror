@@ -1,19 +1,82 @@
 {
   "manifest_version": 3,
   "name": "Privacy Mirror",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Evidence-driven cross-layer tracking analysis with minimum intervention.",
   "minimum_chrome_version": "114",
-  "permissions": ["storage", "webRequest", "webNavigation", "declarativeNetRequest", "sidePanel", "tabs"],
-  "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Privacy Mirror 열기" },
-  "side_panel": { "default_path": "sidepanel.html" },
+  "permissions": [
+    "storage",
+    "webRequest",
+    "webNavigation",
+    "declarativeNetRequest",
+    "sidePanel",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Privacy Mirror 열기"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "content_scripts": [
-    { "matches": ["<all_urls>"], "js": ["main-world.js"], "run_at": "document_start", "all_frames": true, "world": "MAIN" },
-    { "matches": ["<all_urls>"], "js": ["bridge.js"], "run_at": "document_start", "all_frames": true, "world": "ISOLATED" }
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "https://privacy-mirror-analysis-blazetiger10-5946s-projects.vercel.app/dashboard/*",
+        "http://127.0.0.1/dashboard/*",
+        "http://localhost/dashboard/*"
+      ],
+      "js": [
+        "main-world.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "https://privacy-mirror-analysis-blazetiger10-5946s-projects.vercel.app/dashboard/*",
+        "http://127.0.0.1/dashboard/*",
+        "http://localhost/dashboard/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "ISOLATED"
+    },
+    {
+      "matches": [
+        "https://privacy-mirror-analysis-blazetiger10-5946s-projects.vercel.app/dashboard/index.html",
+        "http://127.0.0.1/dashboard/index.html",
+        "http://localhost/dashboard/index.html"
+      ],
+      "js": [
+        "dashboard-bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
   ],
   "declarative_net_request": {
-    "rule_resources": [{ "id": "tracking_parameter_cleaner", "enabled": true, "path": "rules/tracking-parameters.json" }]
+    "rule_resources": [
+      {
+        "id": "tracking_parameter_cleaner",
+        "enabled": true,
+        "path": "rules/tracking-parameters.json"
+      }
+    ]
   }
 }

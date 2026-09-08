@@ -7,9 +7,9 @@ const AI_MODELS = Object.freeze({
 const AI_CONFIG = Object.freeze({
   baseUrl: process.env.NVIDIA_API_BASE_URL || "https://integrate.api.nvidia.com/v1",
   disagreementThreshold: Number(process.env.AI_ESCALATION_DISAGREEMENT_THRESHOLD || 30),
-  timeoutFastMs: Number(process.env.AI_TIMEOUT_FAST_MS || 12000),
-  timeoutDeepMs: Number(process.env.AI_TIMEOUT_DEEP_MS || 25000),
-  timeoutResearchMs: Number(process.env.AI_TIMEOUT_RESEARCH_MS || 60000),
+  timeoutFastMs: Number(process.env.AI_TIMEOUT_FAST_MS || 60000),
+  timeoutDeepMs: Number(process.env.AI_TIMEOUT_DEEP_MS || 90000),
+  timeoutResearchMs: Number(process.env.AI_TIMEOUT_RESEARCH_MS || 180000),
   debounceMs: Number(process.env.AI_ANALYSIS_DEBOUNCE_MS || 1500)
 });
 module.exports = { AI_MODELS, AI_CONFIG };

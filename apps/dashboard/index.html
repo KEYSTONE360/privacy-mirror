@@ -3,51 +3,59 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Privacy Mirror 로컬 분석 대시보드">
-  <title>Privacy Mirror Dashboard</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="description" content="Privacy Mirror 7일 개인정보 보호 관제 대시보드">
+  <title>Privacy Mirror · Protection Intelligence</title>
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="history.css"><link rel="stylesheet" href="../effects/effects.css"><link rel="stylesheet" href="refinements.css"><link rel="stylesheet" href="layer-fix.css"><link rel="stylesheet" href="table-metrics.css">
 </head>
 <body>
-  <aside>
-    <div class="brand"><span>PM</span><b>PRIVACY<br>MIRROR</b></div>
-    <nav aria-label="주 메뉴">
-      <a class="active" href="#overview">Overview</a>
-      <a href="#graph">Tracking Graph</a>
-      <a href="#journey">Privacy Journey</a>
-      <a href="#lab">Protection Lab</a>
-      <a href="#research">Research Mode</a>
-      <a href="#limits">Limits</a>
-    </nav>
-    <p class="local">LOCAL-FIRST<br><span>분석 원문은 이 화면을 벗어나지 않습니다.</span></p>
+  <div id="ambient-fibers" class="ambient-layer" data-effect="fibers" aria-hidden="true"></div>
+  <div id="ambient-rings" class="ambient-layer" data-effect="rings" aria-hidden="true"></div>
+  <aside class="rail">
+    <div class="brand"><div class="brand-mark"><i></i><i></i></div><b>PRIVACY<br>MIRROR</b></div>
+    <p class="rail-label">NAVIGATION</p><div id="line-sidebar" aria-label="주 메뉴"></div>
+    <div class="rail-foot"><span><i></i>LOCAL HISTORY</span><p>도메인별 집계만 브라우저에 7일 보관됩니다.</p></div>
   </aside>
   <main>
-    <header id="overview">
-      <div><p class="eyebrow">LIVE EVIDENCE REPORT</p><h1>보이지 않는 추적을<br>근거로 설명합니다.</h1></div>
-      <div class="status"><i></i> SYNTHETIC DEMO</div>
+    <div class="connection-bar"><span id="current-section">전체 요약</span><span id="connection-help" role="status">확장 연결로 이 브라우저의 실제 7일 기록을 불러옵니다.</span><button id="connect-extension" type="button">확장 연결</button></div>
+    <div id="category-nav"></div>
+    <header id="overview" class="command-header">
+      <div class="header-fiber" data-effect="fibers" aria-hidden="true"></div>
+      <div class="header-copy"><p class="eyebrow">PROTECTION INTELLIGENCE</p><h1>추적 위험 분석</h1><p>관찰 신호, 방어 결과, 위험 집중 구간을 한 화면에서 비교합니다.</p></div>
+      <div id="live-status" class="status"><i></i> CONNECTING</div>
+      <div class="history-toolbar" aria-label="통계 필터">
+        <label><span>분석 사이트</span><select id="site-filter"><option value="*">모든 사이트</option></select></label>
+        <label><span>관찰 기간</span><select id="range-filter"><option value="24">최근 24시간</option><option value="168" selected>최근 7일</option></select></label>
+        <p id="retention-note">브라우저 내부 집계 · 7일 후 자동 삭제</p>
+      </div>
     </header>
-    <section class="hero-grid">
-      <article class="score-card risk"><p>TRACKING RISK</p><strong id="risk">0</strong><span>/100</span><small>추적에 악용될 수 있는 신호의 강도</small></article>
-      <article class="score-card confidence"><p>EVIDENCE CONFIDENCE</p><strong id="confidence">0</strong><span>/100</span><small>서로 다른 계층의 근거가 연결된 정도</small></article>
-      <article class="summary-card"><p>CURRENT SITE</p><h2 id="site">fixture.local</h2><dl><div><dt>Policy</dt><dd id="policy">OBSERVE</dd></div><div><dt>Events</dt><dd id="event-count">0</dd></div><div><dt>Graph edges</dt><dd id="edge-count">0</dd></div></dl></article>
+    <section class="posture-grid" aria-label="핵심 보호 지표">
+      <article class="posture-card primary-risk"><div class="panel-rings" data-effect="rings" aria-hidden="true"></div><p class="eyebrow">WEIGHTED ACCESS RISK</p><div class="metric-line"><strong id="overall-risk-index">0</strong><span>/100</span></div><h2 id="risk-label">분석 대기</h2><p>위험 접근과 주의 접근의 가중 비율입니다. 추적 확률은 아닙니다.</p><div class="risk-track"><i id="risk-track-fill"></i></div></article>
+      <article class="posture-card"><p class="metric-label">방어율</p><strong id="defense-rate">연결 필요</strong><small id="defense-detail">방어 기록을 불러오는 중</small></article>
+      <article class="posture-card"><p class="metric-label">관찰 신호</p><strong id="history-total">0</strong><small>선택한 기간의 전체 이벤트</small></article>
+      <article class="posture-card"><p class="metric-label">방어한 신호</p><strong id="history-defended">0</strong><small>개입이 실제 적용된 이벤트</small></article>
+      <article class="posture-card"><p class="metric-label">활성 사이트</p><strong id="history-sites">0</strong><small id="site">모든 사이트</small></article>
     </section>
-    <section id="graph" class="panel split">
-      <div><p class="eyebrow">CROSS-LAYER TRACKING GRAPH</p><h2>신호에서 외부 전송까지</h2><p>Canvas, digest, storage, navigation, third-party request를 시간·토큰 계보로 연결합니다.</p><div id="legend" class="legend"></div></div>
-      <svg id="graph-canvas" viewBox="0 0 760 380" role="img" aria-label="추적 근거 그래프"></svg>
+    <section class="outcome-strip" aria-label="접근 분류와 방어 결과">
+      <div class="outcome danger"><span>위험 접근</span><strong id="history-dangerous">0</strong></div><div class="outcome warning"><span>주의 접근</span><strong id="history-suspicious">0</strong></div><div class="outcome safe"><span>일반 접근</span><strong id="history-benign">0</strong></div><div class="outcome violet"><span>바꿔치기</span><strong id="history-perturbed">0</strong></div><div class="outcome cyan"><span>링크 정리</span><strong id="history-cleaned">0</strong></div><div class="outcome orange"><span>차단</span><strong id="history-blocked">0</strong></div><div class="outcome muted"><span>호환성 복구</span><strong id="history-rollback">0</strong></div>
     </section>
-    <section id="journey" class="panel">
-      <div class="panel-head"><div><p class="eyebrow">PRIVACY JOURNEY</p><h2>근거가 쌓인 순서</h2></div><button id="replay" type="button">데모 다시 재생</button></div>
-      <ol id="timeline" class="timeline"></ol>
+    <section id="ai-review" class="intelligence-panel">
+      <div class="ai-rings" data-effect="rings" aria-hidden="true"></div>
+      <div class="ai-control"><p class="eyebrow">NVIDIA NIM · EVIDENCE REVIEW</p><h2>AI 종합 평가</h2><p>선택한 범위의 익명 집계를 분석해 위험 신호, 정상 가능성, 판단 한계를 요약합니다.</p><label>분석 모델<select id="history-ai-mode"><option value="FAST">Lightning · 빠른 평가</option><option value="RESEARCH">Ultra · 정밀 Research</option></select></label><button id="run-history-ai" class="action-primary" type="button">현재 범위 종합 평가</button></div>
+      <div class="ai-result"><div class="ai-state"><span id="history-ai-scope">모든 사이트 · 최근 7일</span><strong id="history-ai-status" role="status" aria-live="polite">평가 준비됨</strong></div><p id="history-ai-metrics" class="ai-metrics"></p><ul id="history-ai-findings" class="finding-list"><li>평가를 실행하면 주요 판단 근거가 표시됩니다.</li></ul><p id="history-ai-uncertainty" class="uncertainty"></p></div>
+      <div id="review-cards" class="review-cards" aria-hidden="true"></div><p class="privacy-copy">도메인·URL·쿠키 원문은 AI에 전송하지 않습니다. 집계만으로 실제 유출을 확정할 수 없습니다.</p>
     </section>
-    <section id="lab" class="panel two-column">
-      <div><p class="eyebrow">MINIMUM INTERVENTION</p><h2>가장 적은 개입으로 목표 위험도에 도달</h2><p id="recommendation"></p><ul id="interventions"></ul></div>
-      <div class="before-after"><div><span>현재</span><strong id="before">0</strong></div><b>→</b><div><span>예상</span><strong id="after">0</strong></div></div>
+    <section id="history" class="workspace-grid">
+      <article class="data-panel history-panel"><div class="panel-head"><div><p class="eyebrow">ACTIVITY PULSE</p><h2>시간대별 감지와 방어</h2></div><div class="chart-legend"><span class="detected">관찰</span><span class="defended">방어</span></div></div><svg id="history-chart" viewBox="0 0 1040 300" role="img" aria-label="시간대별 관찰 및 방어 막대 그래프"></svg><p id="history-empty" class="empty-message" hidden>선택한 기간에 저장된 데이터가 없습니다.</p></article>
+      <article class="data-panel category-panel"><div class="panel-head"><div><p class="eyebrow">SIGNAL MIX</p><h2>주요 신호 구성</h2></div></div><div id="category-grid" class="category-grid"><p class="empty-message">관찰 데이터가 없습니다.</p></div></article>
     </section>
-    <section id="research" class="panel">
-      <p class="eyebrow">RESEARCH MODE</p><h2>Ablation / validation / performance</h2>
-      <div class="research-grid"><article><span>Precision</span><strong>1.00</strong><small>합성 fixture 기준</small></article><article><span>Recall</span><strong>1.00</strong><small>합성 fixture 기준</small></article><article><span>P95 hook</span><strong>&lt; 5 ms</strong><small>목표값, 실제 브라우저 재검증 필요</small></article></div>
+    <section id="sites" class="data-panel table-panel"><div class="panel-head"><div><p class="eyebrow">SITE INTELLIGENCE</p><h2>사이트별 우선 확인 대상</h2><p>위험 집중도와 방어 성과를 함께 봅니다. 행을 선택하면 해당 사이트로 필터링됩니다.</p></div></div><div class="site-table-wrap"><table><thead><tr><th>사이트</th><th>상태</th><th>위험지수</th><th>방어율</th><th>관찰</th><th>위험 접근</th><th>주요 신호</th><th>최근 활동</th><th>추세</th></tr></thead><tbody id="site-table"></tbody></table></div></section>
+    <section class="data-panel table-panel"><div class="panel-head"><div><p class="eyebrow">TIME FORENSICS</p><h2>시간대별 상세 분석</h2><p>각 시간 구간의 평균 위험·확신과 실제 방어 결과를 비교합니다.</p></div><span class="privacy-note">전체 URL 대신 eTLD+1 도메인만 표시</span></div><div class="site-table-wrap"><table><thead><tr><th>시간</th><th>사이트</th><th>상태</th><th>주요 신호</th><th>관찰</th><th>방어</th><th>평균 위험</th><th>평균 확신</th><th>처리 결과</th></tr></thead><tbody id="hour-table"></tbody></table></div></section>
+    <section id="graph" class="evidence-grid">
+      <article class="data-panel graph-panel"><div class="panel-copy"><p class="eyebrow">CROSS-LAYER GRAPH</p><h2>계층 간 근거 연결</h2><p>Canvas, WebGL, digest, storage, navigation, 외부 요청이 가까운 시간에 이어진 경우를 표시합니다.</p><div id="legend" class="legend"></div></div><svg id="graph-canvas" viewBox="0 0 820 410" role="img" aria-label="현재 탭의 계층 간 근거 그래프"></svg></article>
+      <article id="intervention" class="data-panel intervention-panel"><p class="eyebrow">MINIMUM INTERVENTION</p><h2>최소 개입 제안</h2><p id="recommendation">현재 탭의 분석 데이터가 없습니다.</p><ul id="interventions"></ul><div class="before-after"><div><span>현재</span><strong id="before">–</strong></div><b>→</b><div><span>예상</span><strong id="after">–</strong></div></div></article>
     </section>
-    <section id="limits" class="limit-panel"><h2>정확한 한계</h2><p>확장 프로그램은 브라우저 엔진 수준 방어가 아닙니다. 제한된 문서, 일부 Worker와 초기 seed 전달 전 호출은 완전 계측·변조되지 않을 수 있습니다. 서버가 애플리케이션 계층에서 요청 본문을 저장하지 않도록 만들 수는 있지만, 호스팅 사업자·TLS 종단·CDN·WAF의 인프라 메타데이터 로그가 절대 0이라고 보장할 수는 없습니다.</p></section>
+    <section id="events" class="data-panel event-panel"><div class="panel-head"><div><p class="eyebrow">CURRENT TAB EVIDENCE</p><h2>최근 감지 신호</h2></div><button id="refresh" type="button">데이터 새로고침</button></div><ol id="timeline" class="timeline"></ol></section>
+    <section id="limits" class="limit-panel"><h2>점수 해석</h2><p>5분 위험도와 7일 위험지수는 계산 범위가 다릅니다. 둘 다 브라우저 API 메타데이터에 대한 추정치이며 사용자 식별이나 실제 전송을 확정하는 증거가 아닙니다. 제한된 페이지, 일부 Worker, 브라우저 엔진 내부 동작은 완전히 관찰되지 않을 수 있습니다.</p></section>
   </main>
-  <script src="app.js"></script>
-</body>
-</html>
+  <div id="action-dock"></div><script src="connection.js"></script><script src="../effects/effects.js"></script><script src="app.js"></script>
+</body></html>

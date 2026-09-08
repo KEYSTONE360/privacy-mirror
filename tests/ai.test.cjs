@@ -5,7 +5,8 @@ const Core = require("../packages/core/src/privacy-mirror-core.js");
 const Sanitizer = require("../packages/ai/src/evidence-sanitizer.js");
 const { validateAnalysis } = require("../packages/ai/src/response-validator.cjs");
 const { routeEvidence } = require("../packages/ai/src/model-router.cjs");
-const { analyzeEvidence } = require("../packages/ai/src/ai-service.cjs");
+const { analyzeEvidence, normalizeProviderResponse } = require("../packages/ai/src/ai-service.cjs");
+const { parseJsonContent, readSseContent } = require("../packages/ai/src/nim-gateway.cjs");
 
 function evidence(local) {
   return {
@@ -66,4 +67,45 @@ test("provider failures fail local without disabling deterministic analysis", as
   assert.equal(result.consensus.state, "LOCAL_ONLY");
   const analyzer = new Core.SessionAnalyzer({ site: "still-works.test" });
   assert.ok(analyzer.ingest({ ts: 1, type: "canvas.read", meta: { hidden: true } }).riskScore > 0);
+});
+
+test("manual analysis always routes to Lightning even for a clear local score", async () => {
+  const calls = [];
+  const gateway = { analyze: async (_, route) => { calls.push(route.tier); return aiResponse(88); } };
+  const input = evidence({ riskScore: 5, confidenceScore: 5 });
+  input.mode = "MANUAL";
+  const result = await analyzeEvidence(input, { gateway });
+  assert.equal(result.status, "OK");
+  assert.deepEqual(calls, ["FAST"]);
+});
+
+test("NIM gateway accepts plain and fenced JSON responses", () => {
+  assert.deepEqual(parseJsonContent('{"ok":true}'), { ok: true });
+  assert.deepEqual(parseJsonContent('```json\n{"ok":true}\n```'), { ok: true });
+  assert.deepEqual(parseJsonContent('reasoning {"draft":true}\nfinal {"ok":true}'), { ok: true });
+  assert.equal(parseJsonContent('{"classification":"UNCERTAIN","aiConfidence":40}\necho {"mode":"MANUAL"}').classification, "UNCERTAIN");
+});
+
+test("NIM streaming accepts Research JSON emitted in reasoning_content", async () => {
+  const payload = 'data: {"choices":[{"delta":{"reasoning_content":"analysis {\\"classification\\":\\"AMBIGUOUS\\",\\"aiConfidence\\":45}"}}]}\n\ndata: [DONE]\n\n';
+  const bytes = new TextEncoder().encode(payload);
+  const response = { body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) };
+  const content = await readSseContent(response);
+  assert.equal(parseJsonContent(content).classification, "AMBIGUOUS");
+});
+
+test("provider response normalization keeps validation strict but tolerates model formatting", () => {
+  const evidence = { events: [{ id: "event_known" }] };
+  const normalized = normalizeProviderResponse({
+    classification: "possible fingerprinting",
+    aiConfidence: "71",
+    benignPlausibility: 20,
+    evidenceStrength: "STRONG",
+    explanation: "Cautious finding",
+    evidenceIds: ["event_known", "event_hallucinated"]
+  }, evidence);
+  assert.equal(normalized.classification, "POSSIBLE_TRACKING");
+  assert.equal(normalized.evidenceStrength, 80);
+  assert.deepEqual(normalized.explanation, ["Cautious finding"]);
+  assert.deepEqual(normalized.evidenceIds, ["event_known"]);
 });

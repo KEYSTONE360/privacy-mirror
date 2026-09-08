@@ -58,3 +58,47 @@ test("minimum intervention optimizer avoids strict blocking when cheaper choices
   assert.ok(result.projectedRisk <= 35);
   assert.equal(result.selected.includes("strict-canvas-block"), false);
 });
+
+test("repeated same-layer calls are damped instead of saturating scores", () => {
+  const analyzer = new Core.SessionAnalyzer({ site: "ordinary.test", startedAt: 1000 });
+  let report;
+  for (let index = 0; index < 100; index += 1) {
+    report = analyzer.ingest({ ts: 1000 + index, type: "storage.read", meta: { operation: "getItem" } });
+  }
+  assert.ok(report.riskScore < 20, `risk was ${report.riskScore}`);
+  assert.ok(report.confidenceScore < 15, `confidence was ${report.confidenceScore}`);
+  assert.equal(report.scoring.featureDiversity, 1);
+});
+
+test("protection controller preserves manual mode and applies auto hysteresis", () => {
+  const controller = new Core.ProtectionController();
+  assert.equal(controller.reconcile({ riskScore: 70, confidenceScore: 60 }, 1000).effective, "protect");
+  assert.equal(controller.reconcile({ riskScore: 50, confidenceScore: 45 }, 2000).effective, "protect");
+  assert.equal(controller.reconcile({ riskScore: 30, confidenceScore: 45 }, 3000).effective, "observe");
+  controller.setMode("protect");
+  assert.equal(controller.reconcile({ riskScore: 0, confidenceScore: 0 }, 4000).effective, "protect");
+  controller.registerRollback(5000);
+  assert.equal(controller.reconcile({ riskScore: 100, confidenceScore: 100 }, 6000).effective, "observe");
+  assert.equal(controller.reconcile({ riskScore: 100, confidenceScore: 100 }, 36000).effective, "protect");
+});
+
+test("seven-day history keeps site and hourly outcomes while pruning expired buckets", () => {
+  const now = Date.UTC(2026, 8, 3, 12, 30);
+  const expired = now - 8 * 24 * 60 * 60 * 1000;
+  const initial = { version: 1, sites: { "old.example": { hours: { [String(Math.floor(expired / 3600000) * 3600000)]: { total: 1 } } } } };
+  const events = [
+    { ts: now - 1000, type: "canvas.read", context: { category: "canvas-read" }, meta: { intervention: "perturbed" }, riskContribution: 18, confidenceContribution: 9 },
+    { ts: now - 2000, type: "navigation.link-cleaned", context: { category: "navigation" }, meta: { intervention: "cleaned" }, riskContribution: 5, confidenceContribution: 4 }
+  ];
+  const history = Core.mergeTrackingHistory(initial, "example.com", events, now);
+  assert.equal(history.sites["old.example"], undefined);
+  const bucket = Object.values(history.sites["example.com"].hours)[0];
+  assert.equal(bucket.total, 2);
+  assert.equal(bucket.outcomes.defended, 2);
+  assert.equal(bucket.outcomes.perturbed, 1);
+  assert.equal(bucket.outcomes.cleaned, 1);
+  assert.equal(bucket.access.dangerous, 1);
+  assert.equal(bucket.access.suspicious, 1);
+  assert.equal(bucket.access.benign, 0);
+  assert.equal(JSON.stringify(history).includes("https://"), false);
+});
