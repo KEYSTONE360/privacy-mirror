@@ -14,10 +14,18 @@ async function analyzeEvidence(input, dependencies) {
   const gateway = dependencies && dependencies.gateway || new NimGateway();
   const calls = [];
   try {
-    const raw = await gateway.analyze(evidence, initialRoute); calls.push(initialRoute.tier);
+    let route = initialRoute;
+    let raw;
+    try { raw = await gateway.analyze(evidence, route); calls.push(route.tier); }
+    catch (initialError) {
+      calls.push(route.tier);
+      if (route.tier !== "FAST") throw initialError;
+      route = { call: true, tier: "RESEARCH", model: AI_MODELS.RESEARCH };
+      raw = await gateway.analyze(evidence, route); calls.push(route.tier);
+    }
     let validated = validateAnalysis(normalizeProviderResponse(raw, evidence), evidence);
-    if (mode === "ADAPTIVE" && initialRoute.tier === "FAST" && shouldEscalate(evidence.localAnalysis.confidenceScore, validated)) {
-      const route = { call: true, tier: "DEEP", model: AI_MODELS.DEEP };
+    if (mode === "ADAPTIVE" && route.tier === "FAST" && shouldEscalate(evidence.localAnalysis.confidenceScore, validated)) {
+      route = { call: true, tier: "DEEP", model: AI_MODELS.DEEP };
       validated = validateAnalysis(normalizeProviderResponse(await gateway.analyze(evidence, route), evidence), evidence); calls.push(route.tier);
     }
     return { status: "OK", route: calls[calls.length - 1], analysis: validated, consensus: consensus(evidence.localAnalysis, validated), calls };

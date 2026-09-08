@@ -215,7 +215,7 @@
     const endpoint = mode === "RESEARCH" ? "/api/ai/research" : "/api/ai/analyze";
     aiByTab.set(tabId, { status: "RUNNING", mode, startedAt: Date.now() });
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), mode === "RESEARCH" ? 190000 : 100000);
+    const timeout = setTimeout(() => controller.abort(), 190000);
     try {
       const evidenceMode = force && mode === "ADAPTIVE" ? "MANUAL" : mode;
       const evidence = Sanitizer.sanitizeEvidence(report, { mode: evidenceMode, evidenceVersion: report.eventCount });

@@ -16,7 +16,7 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-if (!process.env.NVIDIA_API_KEY_FAST && !process.env.NVIDIA_API_KEY) {
+if (!process.env.NVIDIA_API_KEY_FAST) {
   throw new Error("Add NVIDIA_API_KEY_FAST to .env.local before starting local AI");
 }
 

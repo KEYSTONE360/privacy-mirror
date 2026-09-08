@@ -105,7 +105,7 @@ npm run server:local
 ```powershell
 $env:PM_TLS_CERT_PATH = "C:\certs\localhost.crt"
 $env:PM_TLS_KEY_PATH = "C:\certs\localhost.key"
-$env:NVIDIA_API_KEY_FAST = "<server secret>"
+$env:NVIDIA_API_KEY_FAST = "<server secret used by every NIM tier>"
 npm run server
 ```
 

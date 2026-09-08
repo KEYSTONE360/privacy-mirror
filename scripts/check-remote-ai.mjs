@@ -12,4 +12,4 @@ const checks = await Promise.all([
   return { expected, http: response.status, status: result.status, route: result.route, reason: result.reason, classification: result.analysis?.classification, explanationPresent: Boolean(result.analysis?.explanation?.length), elapsedMs: Date.now() - started };
 }));
 for (const check of checks) console.log(JSON.stringify(check));
-if (checks.some(check => check.status !== 'OK' || check.route !== check.expected)) process.exitCode = 1;
+if (checks.some(check => check.status !== 'OK' || (check.expected === 'FAST' ? !['FAST', 'RESEARCH'].includes(check.route) : check.route !== check.expected))) process.exitCode = 1;

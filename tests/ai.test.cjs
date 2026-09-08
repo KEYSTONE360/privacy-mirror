@@ -6,7 +6,7 @@ const Sanitizer = require("../packages/ai/src/evidence-sanitizer.js");
 const { validateAnalysis } = require("../packages/ai/src/response-validator.cjs");
 const { routeEvidence } = require("../packages/ai/src/model-router.cjs");
 const { analyzeEvidence, normalizeProviderResponse } = require("../packages/ai/src/ai-service.cjs");
-const { parseJsonContent, readSseContent } = require("../packages/ai/src/nim-gateway.cjs");
+const { NimGateway, parseJsonContent, readSseContent } = require("../packages/ai/src/nim-gateway.cjs");
 
 function evidence(local) {
   return {
@@ -69,6 +69,16 @@ test("provider failures fail local without disabling deterministic analysis", as
   assert.ok(analyzer.ingest({ ts: 1, type: "canvas.read", meta: { hidden: true } }).riskScore > 0);
 });
 
+test("FAST provider failure falls back to Research with the same gateway", async () => {
+  const calls = [];
+  const gateway = { analyze: async (_, route) => { calls.push(route.tier); if (route.tier === "FAST") throw new DOMException("timed out", "AbortError"); return aiResponse(62); } };
+  const input = evidence({ riskScore: 55, confidenceScore: 40 }); input.mode = "MANUAL";
+  const result = await analyzeEvidence(input, { gateway });
+  assert.equal(result.status, "OK");
+  assert.equal(result.route, "RESEARCH");
+  assert.deepEqual(calls, ["FAST", "RESEARCH"]);
+});
+
 test("manual analysis always routes to Lightning even for a clear local score", async () => {
   const calls = [];
   const gateway = { analyze: async (_, route) => { calls.push(route.tier); return aiResponse(88); } };
@@ -92,6 +102,28 @@ test("NIM streaming accepts Research JSON emitted in reasoning_content", async (
   const response = { body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) };
   const content = await readSseContent(response);
   assert.equal(parseJsonContent(content).classification, "AMBIGUOUS");
+});
+
+test("all NIM tiers use only NVIDIA_API_KEY_FAST", async () => {
+  const previousFast = process.env.NVIDIA_API_KEY_FAST;
+  const previousResearch = process.env.NVIDIA_API_KEY_RESEARCH;
+  process.env.NVIDIA_API_KEY_FAST = "single-fast-key";
+  process.env.NVIDIA_API_KEY_RESEARCH = "ignored-research-key";
+  const authorizations = [];
+  const fetch = async (_, request) => {
+    authorizations.push(request.headers.authorization);
+    const result = { classification: "AMBIGUOUS", aiConfidence: 50, benignPlausibility: 50, evidenceStrength: 50, recommendedActions: [], explanation: [], uncertaintyReasons: [], evidenceIds: [] };
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(result) } }] })}\n\ndata: [DONE]\n\n`);
+  };
+  try {
+    const gateway = new NimGateway({ fetch });
+    await gateway.analyze(evidence({ riskScore: 50, confidenceScore: 50 }), { tier: "FAST", model: "fast" });
+    await gateway.analyze(evidence({ riskScore: 50, confidenceScore: 50 }), { tier: "RESEARCH", model: "research" });
+    assert.deepEqual(authorizations, ["Bearer single-fast-key", "Bearer single-fast-key"]);
+  } finally {
+    if (previousFast === undefined) delete process.env.NVIDIA_API_KEY_FAST; else process.env.NVIDIA_API_KEY_FAST = previousFast;
+    if (previousResearch === undefined) delete process.env.NVIDIA_API_KEY_RESEARCH; else process.env.NVIDIA_API_KEY_RESEARCH = previousResearch;
+  }
 });
 
 test("provider response normalization keeps validation strict but tolerates model formatting", () => {
